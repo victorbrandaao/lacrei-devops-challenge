@@ -1,0 +1,47 @@
+name: CI Pipeline
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+jobs:
+  lint-test-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run lint
+        run: npm run lint || echo "Lint não configurado, continue..."
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: false
+          tags: lacrei-api:${{ github.sha }}
+
+      - name: Validate Docker container
+        run: |
+          docker run -d -p 3000:3000 --name test-container lacrei-api:${{ github.sha }}
+          sleep 10
+          curl --fail http://localhost:3000/status
+          docker stop test-container
+          docker rm test-container
