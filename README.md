@@ -46,6 +46,7 @@ Sistema de CI/CD com infraestrutura AWS para deploy automatizado.
 ## Como Rodar
 
 **Local:**
+
 ```bash
 npm install
 npm test
@@ -53,6 +54,7 @@ npm start
 ```
 
 **Docker:**
+
 ```bash
 docker build -t lacrei-api .
 docker run -p 3000:3000 lacrei-api
@@ -68,12 +70,14 @@ terraform apply
 ```
 
 **GitHub Secrets necessários:**
+
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`
 
 ## Rollback
 
 **Via ECS:**
+
 ```bash
 aws ecs update-service \
   --cluster lacrei-cluster \
@@ -82,6 +86,7 @@ aws ecs update-service \
 ```
 
 **Via Terraform:**
+
 ```bash
 # Atualizar container_image em variables.tf
 terraform apply
@@ -90,6 +95,7 @@ terraform apply
 ## Observabilidade
 
 **Logs:**
+
 ```bash
 aws logs tail /ecs/lacrei-app --follow
 ```
@@ -97,6 +103,7 @@ aws logs tail /ecs/lacrei-app --follow
 **Health check**: `/status` (30s interval)
 
 **Resposta:**
+
 ```json
 {
   "ok": true,
