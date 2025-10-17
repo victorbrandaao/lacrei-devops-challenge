@@ -1,0 +1,10 @@
+# Terraform variables for Lacrei DevOps Challenge
+environment = "staging"
+project_name = "lacrei"
+region = "sa-east-1"
+desired_count = 1
+container_port = 3000
+
+# Leave empty for HTTP only (no domain/cert needed)
+domain_name = ""
+hosted_zone_id = ""

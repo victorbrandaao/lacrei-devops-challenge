@@ -72,7 +72,7 @@ lacrei-devops-challenge/
 ### ✅ Checklist de Segurança
 
 - [x] **Secrets Management**: GitHub Secrets (AWS credentials nunca no código)
-- [x] **Container Security**: 
+- [x] **Container Security**:
   - Usuário não-root (nodejs:1001)
   - Multi-stage build (reduz superfície de ataque)
   - Image scan automático no ECR
@@ -81,14 +81,14 @@ lacrei-devops-challenge/
   - Security Groups com menor privilégio
   - ALB como único ponto de entrada
   - Containers acessíveis apenas via ALB
-- [x] **HTTPS/TLS**: 
+- [x] **HTTPS/TLS**:
   - Certificado ACM com validação DNS
   - Redirect HTTP -> HTTPS (301)
   - SSL Policy: ELBSecurityPolicy-2016-08
-- [x] **IAM Roles**: 
+- [x] **IAM Roles**:
   - ECS Instance Role (mínimo necessário)
   - Task Execution Role (pull ECR + logs)
-- [x] **Immutable Infrastructure**: 
+- [x] **Immutable Infrastructure**:
   - ECR tags immutable
   - Task definitions versionadas
 
@@ -97,6 +97,7 @@ lacrei-devops-challenge/
 ### Fluxo Completo
 
 1. **Test** (PR + Push)
+
    - Checkout código
    - Setup Node.js 18
    - Instalar dependências
@@ -104,6 +105,7 @@ lacrei-devops-challenge/
    - Upload coverage para Codecov
 
 2. **Build** (Push main)
+
    - Login no ECR
    - Build da imagem Docker
    - Tag: `<commit-sha>` + `latest`
@@ -111,6 +113,7 @@ lacrei-devops-challenge/
    - Scan de vulnerabilidades
 
 3. **Deploy Staging** (automático)
+
    - Atualizar Task Definition
    - Deploy no ECS (staging)
    - Wait for service stability
@@ -133,12 +136,14 @@ PORT=3000
 ## 🌐 Ambientes
 
 ### Staging
+
 - **URL**: `http://lacrei-staging-alb-xxx.sa-east-1.elb.amazonaws.com`
 - **Deploy**: Automático (push na main)
 - **Instâncias**: 1x t3.micro
 - **Logs**: CloudWatch `/ecs/lacrei-app`
 
 ### Production
+
 - **URL**: `http://lacrei-prod-alb-xxx.sa-east-1.elb.amazonaws.com`
 - **Deploy**: Manual (aprovação no GitHub)
 - **Instâncias**: 1x t3.micro (escalável)
@@ -147,6 +152,7 @@ PORT=3000
 ## 📊 Observabilidade
 
 ### CloudWatch Logs
+
 ```bash
 # Ver logs do staging
 aws logs tail /ecs/lacrei-app --follow
@@ -156,6 +162,7 @@ aws logs tail /ecs/lacrei-app-prod --follow
 ```
 
 ### Health Check
+
 - **Endpoint**: `/status`
 - **Intervalo**: 30s
 - **Timeout**: 5s
@@ -163,6 +170,7 @@ aws logs tail /ecs/lacrei-app-prod --follow
 - **Unhealthy Threshold**: 2
 
 ### Resposta do `/status`:
+
 ```json
 {
   "ok": true,
@@ -209,12 +217,14 @@ terraform apply -auto-approve
 ```
 
 ### Tempo de Rollback
+
 - **Staging**: ~2 minutos
 - **Production**: ~3 minutos (com health checks)
 
 ## 🏃 Como Rodar Localmente
 
 ### Pré-requisitos
+
 ```bash
 node >= 18
 npm >= 9
@@ -257,6 +267,7 @@ curl http://localhost:3000/status
 ## ☁️ Deploy da Infraestrutura
 
 ### Pré-requisitos AWS
+
 ```bash
 # Configurar AWS CLI
 aws configure
@@ -324,6 +335,7 @@ API Lacrei → API Assas (Split Payment)
 ```
 
 ### Variáveis de ambiente adicionais:
+
 ```bash
 ASSAS_API_KEY=<secret-via-secrets-manager>
 ASSAS_WEBHOOK_SECRET=<secret-via-secrets-manager>
@@ -333,28 +345,31 @@ ASSAS_ENVIRONMENT=sandbox|production
 ## 📝 Registro de Decisões Técnicas
 
 ### Por que ECS on EC2 ao invés de Fargate?
+
 - Custo menor para workloads pequenos
 - Maior controle sobre instâncias
 - Possibilidade de otimização futura
 
 ### Por que não usar CodePipeline?
+
 - GitHub Actions mais familiar para desenvolvedores
 - Integração nativa com repositório
 - Maior flexibilidade e visibilidade
 
 ### Por que multi-stage Docker build?
+
 - Reduz tamanho final da imagem
 - Separa dependências de build/runtime
 - Melhora segurança
 
 ## 🐛 Erros Encontrados e Soluções
 
-| Erro | Solução |
-|------|---------|
-| Task não inicia no ECS | Verificar IAM role e ECR permissions |
-| Health check falha | Ajustar timeout e intervalo para 30s |
-| ALB 502 Bad Gateway | Security Group não permitia tráfego do ALB |
-| Terraform state lock | Usar S3 backend com DynamoDB lock |
+| Erro                   | Solução                                    |
+| ---------------------- | ------------------------------------------ |
+| Task não inicia no ECS | Verificar IAM role e ECR permissions       |
+| Health check falha     | Ajustar timeout e intervalo para 30s       |
+| ALB 502 Bad Gateway    | Security Group não permitia tráfego do ALB |
+| Terraform state lock   | Usar S3 backend com DynamoDB lock          |
 
 ## 🤝 Contribuindo
 

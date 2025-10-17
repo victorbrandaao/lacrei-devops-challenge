@@ -1,6 +1,7 @@
 # Guia de Setup Rápido
 
 ## 1. Pré-requisitos
+
 - AWS CLI configurado (`aws configure`)
 - Terraform >= 1.5.0
 - Docker instalado
@@ -26,6 +27,7 @@ aws iam create-access-key --user-name lacrei-cicd
 No repositório GitHub: `Settings` > `Secrets and variables` > `Actions`
 
 Adicionar:
+
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`
 
@@ -81,6 +83,7 @@ aws ecs describe-services \
 ## Troubleshooting
 
 ### Task não inicia
+
 ```bash
 # Verificar logs do ECS
 aws ecs describe-tasks \
@@ -93,6 +96,7 @@ aws ecr get-login-password --region sa-east-1 | \
 ```
 
 ### Health check falha
+
 ```bash
 # SSH na instância EC2
 aws ssm start-session --target <instance-id>

@@ -36,61 +36,64 @@ Sistema de split de pagamento para distribuir valores entre profissionais de sa�
 
 ```javascript
 // src/routes/payment.js
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const axios = require('axios');
+const axios = require("axios");
 
-router.post('/create-charge', async (req, res) => {
+router.post("/create-charge", async (req, res) => {
   const { amount, customerId, professionalId } = req.body;
 
   const assasConfig = {
     baseURL: process.env.ASSAS_API_URL,
     headers: {
-      'access_token': process.env.ASSAS_API_KEY,
-      'Content-Type': 'application/json'
-    }
+      access_token: process.env.ASSAS_API_KEY,
+      "Content-Type": "application/json",
+    },
   };
 
   try {
     // Calcular split (exemplo: 70% profissional, 30% Lacrei)
-    const professionalAmount = amount * 0.70;
-    const lacreiFee = amount * 0.30;
+    const professionalAmount = amount * 0.7;
+    const lacreiFee = amount * 0.3;
 
     // Criar cobrança com split
-    const charge = await axios.post('/v3/payments', {
-      customer: customerId,
-      billingType: 'CREDIT_CARD',
-      value: amount,
-      dueDate: new Date().toISOString().split('T')[0],
-      description: 'Consulta Lacrei Saúde',
-      split: [
-        {
-          walletId: professionalId, // Wallet do profissional
-          fixedValue: professionalAmount
-        }
-      ]
-    }, assasConfig);
+    const charge = await axios.post(
+      "/v3/payments",
+      {
+        customer: customerId,
+        billingType: "CREDIT_CARD",
+        value: amount,
+        dueDate: new Date().toISOString().split("T")[0],
+        description: "Consulta Lacrei Saúde",
+        split: [
+          {
+            walletId: professionalId, // Wallet do profissional
+            fixedValue: professionalAmount,
+          },
+        ],
+      },
+      assasConfig
+    );
 
     // Salvar no banco de dados
     await db.transactions.create({
       assasId: charge.data.id,
       amount,
-      status: 'PENDING',
+      status: "PENDING",
       professionalId,
       customerId,
       professionalAmount,
-      lacreiFee
+      lacreiFee,
     });
 
     res.json({
       success: true,
       paymentUrl: charge.data.invoiceUrl,
-      transactionId: charge.data.id
+      transactionId: charge.data.id,
     });
-
   } catch (error) {
-    console.error('Erro ao criar cobrança:', error);
-    res.status(500).json({ error: 'Erro ao processar pagamento' });
+    console.error("Erro ao criar cobrança:", error);
+    res.status(500).json({ error: "Erro ao processar pagamento" });
   }
 });
 
@@ -101,22 +104,22 @@ module.exports = router;
 
 ```javascript
 // src/routes/webhook.js
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const crypto = require('crypto');
+const crypto = require("crypto");
 
-router.post('/assas-webhook', async (req, res) => {
+router.post("/assas-webhook", async (req, res) => {
   const { event, payment } = req.body;
 
   // Validar assinatura do webhook
-  const signature = req.headers['asaas-signature'];
+  const signature = req.headers["asaas-signature"];
   const expectedSignature = crypto
-    .createHmac('sha256', process.env.ASSAS_WEBHOOK_SECRET)
+    .createHmac("sha256", process.env.ASSAS_WEBHOOK_SECRET)
     .update(JSON.stringify(req.body))
-    .digest('hex');
+    .digest("hex");
 
   if (signature !== expectedSignature) {
-    return res.status(401).json({ error: 'Invalid signature' });
+    return res.status(401).json({ error: "Invalid signature" });
   }
 
   // Atualizar status da transação
@@ -126,7 +129,7 @@ router.post('/assas-webhook', async (req, res) => {
   );
 
   // Enviar notificação ao profissional e cliente
-  if (payment.status === 'CONFIRMED') {
+  if (payment.status === "CONFIRMED") {
     await notifyProfessional(payment.id);
     await notifyCustomer(payment.id);
   }
@@ -162,17 +165,21 @@ aws secretsmanager create-secret \
 
 ```javascript
 // Carregar secrets na aplicação
-const AWS = require('aws-sdk');
-const secretsManager = new AWS.SecretsManager({ region: 'sa-east-1' });
+const AWS = require("aws-sdk");
+const secretsManager = new AWS.SecretsManager({ region: "sa-east-1" });
 
 async function loadSecrets() {
-  const apiKey = await secretsManager.getSecretValue({ 
-    SecretId: 'lacrei/assas/api-key' 
-  }).promise();
-  
-  const webhookSecret = await secretsManager.getSecretValue({ 
-    SecretId: 'lacrei/assas/webhook-secret' 
-  }).promise();
+  const apiKey = await secretsManager
+    .getSecretValue({
+      SecretId: "lacrei/assas/api-key",
+    })
+    .promise();
+
+  const webhookSecret = await secretsManager
+    .getSecretValue({
+      SecretId: "lacrei/assas/webhook-secret",
+    })
+    .promise();
 
   process.env.ASSAS_API_KEY = apiKey.SecretString;
   process.env.ASSAS_WEBHOOK_SECRET = webhookSecret.SecretString;
@@ -217,23 +224,21 @@ resource "aws_iam_role_policy_attachment" "task_secrets" {
 
 ```javascript
 // __tests__/payment.test.js
-describe('Payment Integration', () => {
-  it('should create charge with split', async () => {
-    const mockAssas = nock('https://sandbox.asaas.com')
-      .post('/api/v3/payments')
+describe("Payment Integration", () => {
+  it("should create charge with split", async () => {
+    const mockAssas = nock("https://sandbox.asaas.com")
+      .post("/api/v3/payments")
       .reply(200, {
-        id: 'pay_123',
-        invoiceUrl: 'https://asaas.com/invoice/abc',
-        status: 'PENDING'
+        id: "pay_123",
+        invoiceUrl: "https://asaas.com/invoice/abc",
+        status: "PENDING",
       });
 
-    const response = await request(app)
-      .post('/api/create-charge')
-      .send({
-        amount: 100,
-        customerId: 'cus_123',
-        professionalId: 'prof_456'
-      });
+    const response = await request(app).post("/api/create-charge").send({
+      amount: 100,
+      customerId: "cus_123",
+      professionalId: "prof_456",
+    });
 
     expect(response.status).toBe(200);
     expect(response.body.paymentUrl).toBeDefined();
@@ -259,22 +264,28 @@ describe('Payment Integration', () => {
 
 ```javascript
 // CloudWatch metrics
-const AWS = require('aws-sdk');
+const AWS = require("aws-sdk");
 const cloudwatch = new AWS.CloudWatch();
 
 async function trackPayment(status) {
-  await cloudwatch.putMetricData({
-    Namespace: 'Lacrei/Payments',
-    MetricData: [{
-      MetricName: 'PaymentStatus',
-      Value: 1,
-      Unit: 'Count',
-      Dimensions: [{
-        Name: 'Status',
-        Value: status
-      }]
-    }]
-  }).promise();
+  await cloudwatch
+    .putMetricData({
+      Namespace: "Lacrei/Payments",
+      MetricData: [
+        {
+          MetricName: "PaymentStatus",
+          Value: 1,
+          Unit: "Count",
+          Dimensions: [
+            {
+              Name: "Status",
+              Value: status,
+            },
+          ],
+        },
+      ],
+    })
+    .promise();
 }
 ```
 

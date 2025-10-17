@@ -5,6 +5,7 @@
 ### ✅ Implementado (Código Pronto)
 
 - [x] **Aplicação Node.js**
+
   - [x] API com rota `/status`
   - [x] Testes Jest (100% coverage)
   - [x] Middleware de erro 404
@@ -12,6 +13,7 @@
   - [x] Health checks
 
 - [x] **Docker**
+
   - [x] Dockerfile multi-stage
   - [x] Usuário não-root
   - [x] Health check configurado
@@ -19,6 +21,7 @@
   - [x] docker-compose.yml para dev local
 
 - [x] **Infraestrutura Terraform**
+
   - [x] VPC com multi-AZ
   - [x] Application Load Balancer
   - [x] ECS Cluster (EC2)
@@ -29,6 +32,7 @@
   - [x] Suporte a HTTPS/TLS (ACM)
 
 - [x] **CI/CD GitHub Actions**
+
   - [x] Pipeline de testes
   - [x] Build e push para ECR
   - [x] Deploy staging (automático)
@@ -36,6 +40,7 @@
   - [x] Health checks pós-deploy
 
 - [x] **Documentação**
+
   - [x] README completo com arquitetura
   - [x] SETUP.md com guia passo a passo
   - [x] ASSAS_INTEGRATION.md com proposta
@@ -77,6 +82,7 @@ aws iam create-access-key --user-name lacrei-cicd
 Ir em: https://github.com/victorbrandaao/lacrei-devops-challenge/settings/secrets/actions
 
 Adicionar:
+
 - `AWS_ACCESS_KEY_ID` = (do passo anterior)
 - `AWS_SECRET_ACCESS_KEY` = (do passo anterior)
 
@@ -138,6 +144,7 @@ aws ecs list-tasks --cluster lacrei-cluster --service-name lacrei-service
 
 ```markdown
 # Lacrei Saúde - Desafio DevOps
+
 ## Victor Brandão
 
 ### 💙 Por que DevOps na Lacrei?
@@ -187,6 +194,7 @@ https://github.com/victorbrandaao/lacrei-devops-challenge/actions
 ### 🔄 Rollback
 
 Três métodos documentados:
+
 1. Via GitHub Actions (rerun com commit anterior)
 2. Via AWS ECS (update service com task definition anterior)
 3. Via Terraform (revert image tag)
@@ -216,6 +224,7 @@ documentada em ASSAS_INTEGRATION.md
 **Assunto:** Entrega - Desafio DevOps - Victor Brandão
 
 **Corpo:**
+
 ```
 Olá, time da Lacrei Saúde!
 
@@ -245,16 +254,16 @@ Victor Brandão
 
 ## 📊 Resumo do Tempo Estimado
 
-| Atividade | Tempo |
-|-----------|-------|
-| Setup AWS | 30 min |
-| GitHub Secrets | 5 min |
-| Deploy Infra | 20 min |
-| Testar Pipeline | 10 min |
-| Validar Ambientes | 10 min |
-| Página Notion | 30 min |
-| Enviar E-mail | 5 min |
-| **TOTAL** | **~2h** |
+| Atividade         | Tempo   |
+| ----------------- | ------- |
+| Setup AWS         | 30 min  |
+| GitHub Secrets    | 5 min   |
+| Deploy Infra      | 20 min  |
+| Testar Pipeline   | 10 min  |
+| Validar Ambientes | 10 min  |
+| Página Notion     | 30 min  |
+| Enviar E-mail     | 5 min   |
+| **TOTAL**         | **~2h** |
 
 ---
 
@@ -271,9 +280,11 @@ Victor Brandão
 ## 📝 Notas Importantes
 
 1. **Custo AWS**: Infraestrutura vai gerar custo (t3.micro ~$7/mês + ALB ~$20/mês)
+
    - Lembrar de destruir após avaliação se necessário: `terraform destroy`
 
 2. **Domínio**: HTTPS só funciona se tiver domínio no Route53
+
    - Senão, usar apenas HTTP (já configurado como fallback)
 
 3. **Primeiro Deploy**: Pode levar ~10 minutos para task ficar healthy
