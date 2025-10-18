@@ -12,6 +12,7 @@ env:
   ECS_CLUSTER: lacrei-cluster
   ECS_SERVICE: lacrei-service
   CONTAINER_NAME: lacrei-container
+  DEPLOY_ENABLED: "false"
 
 jobs:
   test:
@@ -83,6 +84,7 @@ jobs:
     name: Deploy to Staging
     runs-on: ubuntu-latest
     needs: build
+    if: ${{ env.DEPLOY_ENABLED == 'true' }}
     environment:
       name: staging
       url: http://lacrei-staging-alb-123456789.sa-east-1.elb.amazonaws.com
@@ -130,6 +132,7 @@ jobs:
     name: Deploy to Production
     runs-on: ubuntu-latest
     needs: [build, deploy-staging]
+    if: ${{ env.DEPLOY_ENABLED == 'true' }}
     environment:
       name: production
       url: http://lacrei-prod-alb-123456789.sa-east-1.elb.amazonaws.com
