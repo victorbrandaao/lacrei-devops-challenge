@@ -1,0 +1,117 @@
+name: Deploy to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Git SHA or tag to deploy'
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: sa-east-1
+  ECR_REPOSITORY: lacrei-api
+  ECS_CLUSTER: lacrei-cluster
+  ECS_SERVICE: lacrei-service
+  CONTAINER_NAME: lacrei-container
+
+jobs:
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_PRODUCTION }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Get staging-validated image
+        id: get-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          IMAGE_URI=$ECR_REGISTRY/$ECR_REPOSITORY:$VERSION
+          
+          # Tag for production
+          MANIFEST=$(aws ecr batch-get-image \
+            --repository-name $ECR_REPOSITORY \
+            --image-ids imageTag=$VERSION \
+            --output json | jq -r '.images[0].imageManifest')
+          
+          aws ecr put-image \
+            --repository-name $ECR_REPOSITORY \
+            --image-tag production-latest \
+            --image-manifest "$MANIFEST"
+          
+          echo "image=$IMAGE_URI" >> $GITHUB_OUTPUT
+
+      - name: Store rollback info
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition lacrei-task \
+            --query taskDefinition > rollback-task-def.json
+          
+          echo "📦 Rollback snapshot created"
+
+      - name: Upload rollback artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rollback-${{ github.run_id }}
+          path: rollback-task-def.json
+          retention-days: 30
+
+      - name: Download task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition lacrei-task \
+            --query taskDefinition > task-definition.json
+
+      - name: Update task definition
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ steps.get-image.outputs.image }}
+
+      - name: Deploy to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+          wait-for-minutes: 15
+
+      - name: Run production smoke tests
+        run: |
+          ALB_DNS=$(aws elbv2 describe-load-balancers \
+            --names lacrei-alb \
+            --query 'LoadBalancers[0].DNSName' \
+            --output text)
+          
+          sleep 30
+          response=$(curl -s -o /dev/null -w "%{http_code}" http://$ALB_DNS/status)
+          
+          if [ "$response" != "200" ]; then
+            echo "❌ Production smoke test failed"
+            exit 1
+          fi
+          
+          echo "✅ Production deploy successful"

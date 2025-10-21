@@ -1,0 +1,108 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: sa-east-1
+  ECR_REPOSITORY: lacrei-api
+  ECS_CLUSTER: lacrei-cluster
+  ECS_SERVICE: lacrei-service
+  CONTAINER_NAME: lacrei-container
+
+jobs:
+  deploy-staging:
+    name: Deploy to Staging Environment
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: ${{ steps.get-url.outputs.alb_url }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_STAGING }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-Staging-${{ github.run_id }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image to ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            --build-arg COMMIT_SHA=$IMAGE_TAG .
+          
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            $ECR_REGISTRY/$ECR_REPOSITORY:staging-latest
+          
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:staging-latest
+          
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Download current task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition lacrei-task \
+            --query taskDefinition > task-definition.json
+
+      - name: Update task definition with new image
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ steps.build-image.outputs.image }}
+
+      - name: Deploy to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+          wait-for-minutes: 10
+
+      - name: Get ALB URL
+        id: get-url
+        run: |
+          ALB_DNS=$(aws elbv2 describe-load-balancers \
+            --names lacrei-alb \
+            --query 'LoadBalancers[0].DNSName' \
+            --output text)
+          echo "alb_url=http://$ALB_DNS" >> $GITHUB_OUTPUT
+          echo "✅ Deployed to: http://$ALB_DNS"
+
+      - name: Run smoke tests
+        run: |
+          ALB_DNS=$(aws elbv2 describe-load-balancers \
+            --names lacrei-alb \
+            --query 'LoadBalancers[0].DNSName' \
+            --output text)
+          
+          sleep 30
+          
+          response=$(curl -s -o /dev/null -w "%{http_code}" http://$ALB_DNS/status)
+          
+          if [ "$response" != "200" ]; then
+            echo "❌ Smoke test failed"
+            exit 1
+          fi
+          
+          echo "✅ Smoke tests passed"
