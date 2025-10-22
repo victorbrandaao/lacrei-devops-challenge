@@ -1,10 +1,17 @@
 terraform {
   required_version = ">= 1.5.0"
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
       version = "~> 5.50"
     }
+  }
+
+  backend "s3" {
+    bucket = "lacrei-terraform-state-428014821600"
+    key    = "lacrei-devops/terraform.tfstate"
+    region = "sa-east-1"
   }
 }
 
@@ -12,12 +19,18 @@ provider "aws" {
   region = var.region
 }
 
-# VPC e Subnets
+############################
+# Networking (VPC + Subnets públicas)
+############################
+
 resource "aws_vpc" "this" {
   cidr_block           = "10.20.0.0/16"
   enable_dns_support   = true
   enable_dns_hostnames = true
-  tags = { Name = "${var.project_name}-vpc" }
+  tags = { 
+    Name = "${var.project_name}-${var.environment}-vpc" 
+    Environment = var.environment
+  }
 }
 
 resource "aws_internet_gateway" "this" {
@@ -62,7 +75,11 @@ resource "aws_route_table_association" "public_b" {
   route_table_id = aws_route_table.public.id
 }
 
+############################
 # Security Groups
+############################
+
+# ALB SG: 80 e 443 abertos
 resource "aws_security_group" "alb_sg" {
   name        = "${var.project_name}-alb-sg"
   description = "ALB SG"
@@ -84,7 +101,7 @@ resource "aws_security_group" "alb_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  egress {
+  egress { # saída liberada (pull de imagem, updates)
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -94,6 +111,7 @@ resource "aws_security_group" "alb_sg" {
   tags = { Name = "${var.project_name}-alb-sg" }
 }
 
+# EC2 SG: recebe somente do ALB na porta da aplicação
 resource "aws_security_group" "ecs_instances_sg" {
   name        = "${var.project_name}-ecs-instances-sg"
   description = "ECS EC2 instances SG"
@@ -117,15 +135,22 @@ resource "aws_security_group" "ecs_instances_sg" {
   tags = { Name = "${var.project_name}-ecs-instances-sg" }
 }
 
-# ECR
+############################
+# ECR (repositório privado)
+############################
+
 resource "aws_ecr_repository" "repo" {
-  name                 = "lacrei-api"
+  name                 = "${var.project_name}-api"
   image_tag_mutability = "IMMUTABLE"
   image_scanning_configuration { scan_on_push = true }
   tags = { Name = "${var.project_name}-ecr" }
 }
 
+############################
 # IAM para ECS on EC2
+############################
+
+# Role para EC2 executar o agente ECS
 resource "aws_iam_role" "ecs_instance_role" {
   name = "${var.project_name}-ecsInstanceRole"
   assume_role_policy = jsonencode({
@@ -148,16 +173,22 @@ resource "aws_iam_instance_profile" "ecs_instance_profile" {
   role = aws_iam_role.ecs_instance_role.name
 }
 
+############################
 # ECS Cluster
+############################
+
 resource "aws_ecs_cluster" "this" {
   name = "${var.project_name}-cluster"
-  tags = { Name = "${var.project_name}-cluster" }
 }
 
+############################
 # Launch Template + ASG (EC2)
+############################
+
 data "aws_ami" "ecs_amazon_linux2" {
   most_recent = true
   owners      = ["amazon"]
+
   filter {
     name   = "image-id"
     values = [var.ecs_ami_id]
@@ -212,7 +243,10 @@ resource "aws_autoscaling_group" "ecs_asg" {
   }
 }
 
-# ALB + Target Group + Listener
+############################
+# ALB + Target Group + Listeners
+############################
+
 resource "aws_lb" "app" {
   name               = "${var.project_name}-alb"
   load_balancer_type = "application"
@@ -237,10 +271,53 @@ resource "aws_lb_target_group" "app" {
   tags = { Name = "${var.project_name}-tg" }
 }
 
+# HTTP 80 -> redirect 443
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.app.arn
   port              = "80"
   protocol          = "HTTP"
+
+  default_action {
+    type = "redirect"
+    redirect {
+      port        = "443"
+      protocol    = "HTTPS"
+      status_code = "HTTP_301"
+    }
+  }
+}
+
+# Certificado ACM com validação DNS (ativado somente se domain_name e hosted_zone_id preenchidos)
+resource "aws_acm_certificate" "cert" {
+  count             = length(var.domain_name) > 0 ? 1 : 0
+  domain_name       = var.domain_name
+  validation_method = "DNS"
+
+  lifecycle { create_before_destroy = true }
+}
+
+resource "aws_route53_record" "cert_validation" {
+  count   = length(var.domain_name) > 0 ? 1 : 0
+  name    = lookup(element(aws_acm_certificate.cert[0].domain_validation_options, 0), "resource_record_name")
+  type    = lookup(element(aws_acm_certificate.cert[0].domain_validation_options, 0), "resource_record_type")
+  zone_id = var.hosted_zone_id
+  records = [lookup(element(aws_acm_certificate.cert[0].domain_validation_options, 0), "resource_record_value")]
+  ttl     = 60
+}
+
+resource "aws_acm_certificate_validation" "cert_validation" {
+  count                   = length(var.domain_name) > 0 ? 1 : 0
+  certificate_arn         = aws_acm_certificate.cert[0].arn
+  validation_record_fqdns = [aws_route53_record.cert_validation[0].fqdn]
+}
+
+resource "aws_lb_listener" "https" {
+  count             = length(var.domain_name) > 0 ? 1 : 0
+  load_balancer_arn = aws_lb.app.arn
+  port              = 443
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-2016-08"
+  certificate_arn   = aws_acm_certificate_validation.cert_validation[0].certificate_arn
 
   default_action {
     type             = "forward"
@@ -248,7 +325,11 @@ resource "aws_lb_listener" "http" {
   }
 }
 
+############################
 # ECS Task Definition + Service
+############################
+
+# Role de execução ECS Task (pull ECR + logs CloudWatch)
 resource "aws_iam_role" "ecs_task_execution_role" {
   name = "${var.project_name}-ecsTaskExecutionRole"
   assume_role_policy = jsonencode({
@@ -269,7 +350,6 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution_attach" {
 resource "aws_cloudwatch_log_group" "app" {
   name              = "/ecs/${var.project_name}-app"
   retention_in_days = 14
-  tags = { Name = "${var.project_name}-logs" }
 }
 
 resource "aws_ecs_task_definition" "app" {
@@ -291,7 +371,7 @@ resource "aws_ecs_task_definition" "app" {
         protocol      = "tcp"
       }],
       environment = [
-        { "name" : "NODE_ENV", "value" : "staging" }
+        { "name": "NODE_ENV", "value": "staging" }
       ],
       logConfiguration = {
         logDriver = "awslogs",
@@ -325,21 +405,17 @@ resource "aws_ecs_service" "app" {
     container_port   = var.container_port
   }
 
-  # Rollback automático em caso de falha no deploy
-  deployment_circuit_breaker {
-    enable   = true
-    rollback = true
-  }
-
   depends_on = [
-    aws_lb.app,
-    aws_lb_target_group.app,
     aws_lb_listener.http,
-    aws_autoscaling_group.ecs_asg
+    aws_lb_target_group.app
   ]
 
   deployment_minimum_healthy_percent = 50
   deployment_maximum_percent         = 200
+}
 
-  tags = { Name = "${var.project_name}-service" }
+variable "alert_email" {
+  type        = string
+  description = "Email para receber alertas do CloudWatch"
+  default     = "seu-email@exemplo.com"
 }

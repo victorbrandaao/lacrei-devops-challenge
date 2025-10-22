@@ -1,4 +1,14 @@
-# alarms.tf - CloudWatch Alarms para monitoramento
+# SNS Topic para notificações de alarmes
+resource "aws_sns_topic" "alerts" {
+  name = "${var.project_name}-alerts"
+  tags = { Name = "${var.project_name}-alerts" }
+}
+
+resource "aws_sns_topic_subscription" "alerts_email" {
+  topic_arn = aws_sns_topic.alerts.arn
+  protocol  = "email"
+  endpoint  = var.alert_email
+}
 
 # Alarme para erros 5xx no ALB
 resource "aws_cloudwatch_metric_alarm" "alb_5xx_errors" {
@@ -18,6 +28,9 @@ resource "aws_cloudwatch_metric_alarm" "alb_5xx_errors" {
   }
 
   alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
+  tags = { Name = "${var.project_name}-alb-5xx-errors" }
 }
 
 # Alarme para alta latência
@@ -38,6 +51,9 @@ resource "aws_cloudwatch_metric_alarm" "alb_high_latency" {
   }
 
   alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
+  tags = { Name = "${var.project_name}-alb-high-latency" }
 }
 
 # Alarme para unhealthy targets
@@ -58,19 +74,55 @@ resource "aws_cloudwatch_metric_alarm" "unhealthy_targets" {
   }
 
   alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
+  tags = { Name = "${var.project_name}-unhealthy-targets" }
 }
 
-# SNS Topic para notificações
-resource "aws_sns_topic" "alerts" {
-  name = "${var.project_name}-alerts"
+# Alarme para CPU alta no ECS
+resource "aws_cloudwatch_metric_alarm" "ecs_cpu_high" {
+  alarm_name          = "${var.project_name}-ecs-cpu-high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/ECS"
+  period              = 300
+  statistic           = "Average"
+  threshold           = 80
+  alarm_description   = "Alert when ECS CPU > 80%"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    ServiceName = aws_ecs_service.app.name
+    ClusterName = aws_ecs_cluster.this.name
+  }
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
+  tags = { Name = "${var.project_name}-ecs-cpu-high" }
 }
 
-resource "aws_sns_topic_subscription" "alerts_email" {
-  topic_arn = aws_sns_topic.alerts.arn
-  protocol  = "email"
-  endpoint  = var.alert_email
-}
+# Alarme para memória alta no ECS
+resource "aws_cloudwatch_metric_alarm" "ecs_memory_high" {
+  alarm_name          = "${var.project_name}-ecs-memory-high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "MemoryUtilization"
+  namespace           = "AWS/ECS"
+  period              = 300
+  statistic           = "Average"
+  threshold           = 80
+  alarm_description   = "Alert when ECS Memory > 80%"
+  treat_missing_data  = "notBreaching"
 
-output "sns_topic_arn" {
-  value = aws_sns_topic.alerts.arn
+  dimensions = {
+    ServiceName = aws_ecs_service.app.name
+    ClusterName = aws_ecs_cluster.this.name
+  }
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
+  tags = { Name = "${var.project_name}-ecs-memory-high" }
 }

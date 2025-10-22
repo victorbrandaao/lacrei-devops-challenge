@@ -22,3 +22,13 @@ output "cloudwatch_log_group" {
   description = "CloudWatch log group name"
   value       = aws_cloudwatch_log_group.app.name
 }
+
+output "vpc_id" {
+  description = "VPC ID"
+  value       = aws_vpc.this.id
+}
+
+output "public_subnet_ids" {
+  description = "Public subnet IDs"
+  value       = [aws_subnet.public_a.id, aws_subnet.public_b.id]
+}

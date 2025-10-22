@@ -1,44 +1,53 @@
 variable "region" {
-  type    = string
-  default = "sa-east-1"
+  description = "AWS Region"
+  type        = string
+  default     = "sa-east-1"
 }
 
 variable "project_name" {
-  type    = string
-  default = "lacrei"
-}
-
-variable "environment" {
-  type    = string
-  default = "staging"
-}
-
-variable "domain_name" {
-  type    = string
-  default = ""
-}
-
-variable "hosted_zone_id" {
-  type    = string
-  default = ""
+  description = "Project name used for resource naming"
+  type        = string
+  default     = "lacrei"
 }
 
 variable "container_image" {
-  type    = string
-  default = "428014821600.dkr.ecr.sa-east-1.amazonaws.com/lacrei-api:latest"
+  description = "Container image URI from ECR"
+  type        = string
+  default     = "428014821600.dkr.ecr.sa-east-1.amazonaws.com/lacrei-api:latest"
 }
 
 variable "container_port" {
-  type    = number
-  default = 3000
+  description = "Port exposed by the container"
+  type        = number
+  default     = 3000
 }
 
 variable "desired_count" {
-  type    = number
-  default = 1
+  description = "Desired number of ECS tasks"
+  type        = number
+  default     = 1
 }
 
 variable "ecs_ami_id" {
-  type    = string
-  default = "ami-02f46e3dab0c6159e"
+  description = "ECS-optimized AMI ID for EC2 instances"
+  type        = string
+  default     = "ami-02f46e3dab0c6159e"
+}
+
+variable "domain_name" {
+  description = "Domain name for HTTPS (leave empty to skip HTTPS setup)"
+  type        = string
+  default     = ""
+}
+
+variable "hosted_zone_id" {
+  description = "Route53 hosted zone ID for domain validation"
+  type        = string
+  default     = ""
+}
+
+variable "alert_email" {
+  description = "Email address for CloudWatch alarms"
+  type        = string
+  default     = "seu-email@exemplo.com"
 }

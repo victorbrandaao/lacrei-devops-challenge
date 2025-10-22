@@ -1,8 +1,7 @@
-# secrets.tf - AWS Secrets Manager
-
+# AWS Secrets Manager para credenciais sensíveis
 resource "aws_secretsmanager_secret" "app_secrets" {
   name                    = "${var.project_name}-app-secrets"
-  description             = "Credenciais sensíveis da aplicação"
+  description             = "Credenciais sensíveis da aplicação ${var.project_name}"
   recovery_window_in_days = 7
 
   tags = {
@@ -11,6 +10,7 @@ resource "aws_secretsmanager_secret" "app_secrets" {
   }
 }
 
+# Versão inicial do secret (ajuste os valores via AWS Console ou CI/CD)
 resource "aws_secretsmanager_secret_version" "app_secrets_version" {
   secret_id = aws_secretsmanager_secret.app_secrets.id
 
@@ -25,7 +25,7 @@ resource "aws_secretsmanager_secret_version" "app_secrets_version" {
   }
 }
 
-# Permissão para ECS Task acessar secrets
+# Permissão para ECS Task acessar o Secrets Manager
 resource "aws_iam_role_policy" "ecs_task_secrets_policy" {
   name = "${var.project_name}-task-secrets-policy"
   role = aws_iam_role.ecs_task_execution_role.id
@@ -39,13 +39,14 @@ resource "aws_iam_role_policy" "ecs_task_secrets_policy" {
           "secretsmanager:GetSecretValue"
         ]
         Resource = aws_secretsmanager_secret.app_secrets.arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt"
+        ]
+        Resource = "*"
       }
     ]
   })
-}
-
-output "secrets_manager_arn" {
-  description = "ARN do Secrets Manager"
-  value       = aws_secretsmanager_secret.app_secrets.arn
-  sensitive   = true
 }
