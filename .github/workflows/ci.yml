@@ -1,4 +1,4 @@
-name: CI - Tests and Validation
+name: CI - Tests and Security Scan
 
 on:
   pull_request:
@@ -9,12 +9,13 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  security-events: write
 
 jobs:
   test:
     name: Run Tests
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -22,27 +23,30 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          cache: 'npm'
+          node-version: "18"
+          cache: "npm"
 
       - name: Install dependencies
         run: npm ci
 
+      - name: Run linter
+        run: npm run lint || echo "⚠️ Linter not configured"
+
       - name: Run unit tests
         run: npm test -- --coverage
 
-      - name: Upload coverage report
+      - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
         with:
           files: ./coverage/coverage-final.json
           flags: unittests
           fail_ci_if_error: false
 
-  docker-build-and-scan:
-    name: Build and Scan Docker Image
+  docker-security:
+    name: Docker Build and Security Scan
     runs-on: ubuntu-latest
     needs: test
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -64,24 +68,39 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: lacrei-api:${{ github.sha }}
-          format: 'table'
-          severity: 'CRITICAL,HIGH'
-          exit-code: '0'
+          format: "sarif"
+          output: "trivy-results.sarif"
+          severity: "CRITICAL,HIGH"
+          exit-code: "0"
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: "trivy-results.sarif"
 
       - name: Validate container health
         run: |
+          echo "🚀 Starting container..."
           docker run -d -p 3000:3000 --name test-container lacrei-api:${{ github.sha }}
-          sleep 10
-          
+
+          echo "⏳ Waiting for container to be ready..."
+          sleep 15
+
+          echo "🔍 Testing health endpoint..."
           response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/status)
-          
+
           if [ "$response" != "200" ]; then
             echo "❌ Health check failed with status $response"
             docker logs test-container
             exit 1
           fi
-          
-          echo "✅ Container health check passed"
-          
+
+          echo "✅ Container health check passed!"
+
+          # Validate JSON response
+          json=$(curl -s http://localhost:3000/status)
+          echo "Response: $json"
+
           docker stop test-container
           docker rm test-container

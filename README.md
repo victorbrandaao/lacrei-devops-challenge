@@ -6,61 +6,42 @@ Sistema de CI/CD com infraestrutura AWS para deploy automatizado.
 
 - **CI/CD**: GitHub Actions (test → build → staging → production)
 - **Infra**: AWS ECS (EC2), ALB, ECR, CloudWatch
-- **IaC**: Terraform
-- **App**: Node.js 18 + Express
 
-## Estrutura
+# Lacrei DevOps Challenge
 
-```
-.
-├── .github/workflows/ci.yml    # Pipeline
-├── src/
-│   ├── app.js
-│   ├── server.js
-│   ├── routes/status.js
-│   └── __tests__/
-├── lacrei-infra/
-│   ├── main.tf
-│   ├── variables.tf
-│   └── outputs.tf
-├── Dockerfile
-└── package.json
-```
+Aplicação Node.js com CI/CD e infraestrutura preparada em Terraform.
 
-## Segurança
+Resumo rápido
 
-- Secrets no GitHub
-- Container non-root
-- ECR vulnerability scanning
-- Security Groups restritivos
-- HTTPS/TLS com ACM
-- IAM least privilege
+- Serviço: Node.js + Express (endpoint /status)
+- Container: Docker (multi-stage, non-root)
+- CI: GitHub Actions (testes + build)
+- Infra: Terraform (AWS - ECR, ECS, ALB)
 
-## Pipeline
+Execute localmente
 
-1. **Test**: Jest (100% coverage)
-2. **Build**: Docker → ECR
-3. **Staging**: Deploy automático
-4. **Production**: Aprovação manual
-
-## Como Rodar
-
-**Local:**
+1. Instale dependências e rode testes:
 
 ```bash
 npm install
 npm test
-npm start
 ```
 
-**Docker:**
+2. Inicie a aplicação localmente:
+
+```bash
+npm start
+# abre http://localhost:3000/status
+```
+
+Docker
 
 ```bash
 docker build -t lacrei-api .
-docker run -p 3000:3000 lacrei-api
+docker run --rm -p 3000:3000 lacrei-api
 ```
 
-## Deploy Infra
+Provisionamento (Terraform)
 
 ```bash
 cd lacrei-infra
@@ -69,56 +50,23 @@ terraform plan
 terraform apply
 ```
 
-**GitHub Secrets necessários:**
+GitHub Actions / Deploy
 
-- `AWS_ACCESS_KEY_ID`
-- `AWS_SECRET_ACCESS_KEY`
+- A pipeline executa testes e build; o deploy para AWS só será ativado quando a infraestrutura existir e a variável de repositório `DEPLOY_ENABLED` estiver `true`.
 
-## Rollback
+Segredos (GitHub Actions)
 
-**Via ECS:**
+- AWS_ACCESS_KEY_ID
+- AWS_SECRET_ACCESS_KEY
 
-```bash
-aws ecs update-service \
-  --cluster lacrei-cluster \
-  --service lacrei-service \
-  --task-definition lacrei-task:5
-```
+Observabilidade e healthcheck
 
-**Via Terraform:**
+- Endpoint de health: `/status` (retorna JSON com ok, env, version e timestamp)
+- Logs por CloudWatch quando em AWS
 
-```bash
-# Atualizar container_image em variables.tf
-terraform apply
-```
+Sobre o autor
 
-## Observabilidade
+- Sou estudante de Engenharia de Software com foco em DevOps.
+- Esta solução foi construída com auxílio de ferramentas de IA para acelerar implementação e revisão; todas as decisões e o código final foram adaptados e revisados manualmente.
 
-**Logs:**
-
-```bash
-aws logs tail /ecs/lacrei-app --follow
-```
-
-**Health check**: `/status` (30s interval)
-
-**Resposta:**
-
-```json
-{
-  "ok": true,
-  "env": "staging",
-  "version": "abc123",
-  "timestamp": "2025-10-17T19:30:00Z"
-}
-```
-
-## Decisões Técnicas
-
-- **ECS EC2 vs Fargate**: Escolhi EC2 por custo menor
-- **GitHub Actions vs CodePipeline**: Melhor integração com repo
-- **Multi-stage Docker**: Reduz tamanho e melhora segurança
-
-## Licença
-
-MIT
+Licença: MIT

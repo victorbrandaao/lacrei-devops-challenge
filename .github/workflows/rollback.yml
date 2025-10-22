@@ -1,0 +1,66 @@
+name: Rollback ECS Service
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to rollback"
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      task_version:
+        description: "Task definition version to rollback to (leave empty for previous version)"
+        required: false
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  rollback:
+    name: Rollback ECS
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_STAGING }}
+          aws-region: sa-east-1
+
+      - name: Perform rollback
+        run: |
+          chmod +x scripts/rollback.sh
+
+          if [ -n "${{ inputs.task_version }}" ]; then
+            echo "🔄 Rolling back to specific version: ${{ inputs.task_version }}"
+            aws ecs update-service \
+              --cluster lacrei-cluster \
+              --service lacrei-service \
+              --task-definition lacrei-task:${{ inputs.task_version }} \
+              --force-new-deployment
+          else
+            echo "🔄 Rolling back to previous version..."
+            echo "yes" | ECS_CLUSTER=lacrei-cluster ECS_SERVICE=lacrei-service ./scripts/rollback.sh
+          fi
+
+      - name: Wait for stability
+        run: |
+          aws ecs wait services-stable \
+            --cluster lacrei-cluster \
+            --services lacrei-service
+
+      - name: Verify rollback
+        run: |
+          echo "✅ Rollback completed successfully!"
+          aws ecs describe-services \
+            --cluster lacrei-cluster \
+            --services lacrei-service \
+            --query 'services[0].{TaskDefinition:taskDefinition,Status:status,RunningCount:runningCount}'
