@@ -272,27 +272,38 @@ resource "aws_cloudwatch_log_group" "app" {
   tags = { Name = "${var.project_name}-logs" }
 }
 
+# Task Definition OTIMIZADA para t3.micro (1 GB RAM total)
 resource "aws_ecs_task_definition" "app" {
   family                   = "${var.project_name}-task"
   network_mode             = "bridge"
   requires_compatibilities = ["EC2"]
-  cpu                      = "256"
-  memory                   = "512"
-  execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
+  
+  # CORREÇÃO: Reduzido para caber no t3.micro (1 GB RAM total)
+  cpu    = "256"  # 0.25 vCPU
+  memory = "256"  # 256 MB total para a task
+  
+  execution_role_arn = aws_iam_role.ecs_task_execution_role.arn
 
   container_definitions = jsonencode([
     {
       name      = "${var.project_name}-container",
       image     = var.container_image,
       essential = true,
+      
+      # CORREÇÃO: Limite de memória do container
+      memory    = 128,  # 128 MB máximo para o container
+      memoryReservation = 64,  # Reserva mínima de 64 MB
+      
       portMappings = [{
         containerPort = var.container_port
         hostPort      = var.container_port
         protocol      = "tcp"
       }],
+      
       environment = [
         { "name" : "NODE_ENV", "value" : "staging" }
       ],
+      
       logConfiguration = {
         logDriver = "awslogs",
         options = {
@@ -301,6 +312,7 @@ resource "aws_ecs_task_definition" "app" {
           awslogs-stream-prefix = "ecs"
         }
       },
+      
       healthCheck = {
         command     = ["CMD-SHELL", "curl -f http://localhost:${var.container_port}/status || exit 1"],
         interval    = 30,
@@ -312,6 +324,7 @@ resource "aws_ecs_task_definition" "app" {
   ])
 }
 
+# ECS Service com deployment otimizado para memória limitada
 resource "aws_ecs_service" "app" {
   name            = "${var.project_name}-service"
   cluster         = aws_ecs_cluster.this.id
@@ -325,11 +338,16 @@ resource "aws_ecs_service" "app" {
     container_port   = var.container_port
   }
 
-  # Rollback automático em caso de falha no deploy
+  # Rollback automático em caso de falha
   deployment_circuit_breaker {
     enable   = true
     rollback = true
   }
+
+  # CORREÇÃO: Deployment otimizado para instância com pouca memória
+  # Não cria containers extras durante o deploy
+  deployment_maximum_percent         = 100  # Máximo = atual (não cria extras)
+  deployment_minimum_healthy_percent = 0    # Pode ir para 0 (mata antigo antes do novo)
 
   depends_on = [
     aws_lb.app,
@@ -337,9 +355,6 @@ resource "aws_ecs_service" "app" {
     aws_lb_listener.http,
     aws_autoscaling_group.ecs_asg
   ]
-
-  deployment_minimum_healthy_percent = 50
-  deployment_maximum_percent         = 200
 
   tags = { Name = "${var.project_name}-service" }
 }
